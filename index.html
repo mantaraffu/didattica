@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ansia - Sociological Analyzer</title>
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Cormorant+Garamond:wght@300;400;600&family=Inter:wght@300&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --text-primary: #e0e0e0;
+            --text-secondary: #666666;
+            --accent: #ffffff;
+            --transition-speed: 0.8s;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Cormorant Garamond', serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            transition: background-color 1s ease;
+        }
+
+        .container {
+            max-width: 800px;
+            padding: 2rem;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 2s forwards;
+        }
+
+        h1 {
+            font-family: 'Cinzel', serif;
+            font-size: 0.9rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+            opacity: 0.7;
+        }
+
+        #reflection-content {
+            font-size: 2rem;
+            line-height: 1.6;
+            font-weight: 300;
+            margin-bottom: 2rem;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity var(--transition-speed) ease;
+        }
+
+        .meta-info {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 3rem;
+            letter-spacing: 0.1em;
+        }
+
+        .status-indicator {
+            width: 6px;
+            height: 6px;
+            background-color: var(--text-secondary);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            transition: background-color 0.5s;
+        }
+
+        .status-indicator.active {
+            background-color: #4caf50;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        .date-display {
+            margin-top: 0.5rem;
+            opacity: 0.6;
+            font-style: italic;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            #reflection-content {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Riflessioni Sociologiche</h1>
+
+        <div id="reflection-content">
+            Attesa del segnale...
+        </div>
+
+        <div class="meta-info">
+            <div id="status-dot" class="status-indicator"></div>
+            <span id="status-text">DISCONNECTED</span>
+            <div id="last-update" class="date-display"></div>
+        </div>
+    </div>
+
+    <script>
+        const THING_NAME = "ansia_raspberry_broadcast_v1";
+
+        const contentEl = document.getElementById('reflection-content');
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+        const lastUpdateEl = document.getElementById('last-update');
+
+        function updateDisplay(text, timestamp) {
+            contentEl.style.opacity = 0;
+
+            setTimeout(() => {
+                contentEl.innerHTML = text;
+                lastUpdateEl.innerText = timestamp || new Date().toLocaleTimeString();
+                contentEl.style.opacity = 1;
+                statusText.innerText = "LIVE FEED";
+                statusDot.classList.add('active');
+            }, 800);
+        }
+
+        function listenForUpdates() {
+            // Initial fetch
+            fetch(`https://dweet.io/get/latest/dweet/for/${THING_NAME}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.with && data.with.length > 0) {
+                        const content = data.with[0].content;
+                        if (content.text) {
+                            updateDisplay(content.text, content.timestamp);
+                        }
+                    }
+                })
+                .catch(err => console.log("Waiting for data..."));
+
+            // Polling loop
+            setInterval(() => {
+                fetch(`https://dweet.io/get/latest/dweet/for/${THING_NAME}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.with && data.with.length > 0) {
+                            const dweet = data.with[0];
+                            const content = dweet.content;
+                            if (content.text && content.text !== contentEl.innerHTML) {
+                                updateDisplay(content.text, content.timestamp);
+                            }
+                        }
+                    })
+                    .catch(err => {
+                        statusDot.classList.remove('active');
+                        statusText.innerText = "OFFLINE";
+                    });
+            }, 5000);
+        }
+
+        listenForUpdates();
+
+    </script>
+</body>
+
+</html>
