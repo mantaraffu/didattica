@@ -131,7 +131,8 @@
     </div>
 
     <script>
-        const THING_NAME = "ansia_raspberry_broadcast_v1";
+        const TOPIC_NAME = "ansia_raspberry_broadcast_v1";
+        const NTFY_URL = `https://ntfy.sh/${TOPIC_NAME}/sse`;
 
         const contentEl = document.getElementById('reflection-content');
         const statusText = document.getElementById('status-text');
@@ -142,49 +143,57 @@
             contentEl.style.opacity = 0;
 
             setTimeout(() => {
-                contentEl.innerHTML = text;
+                contentEl.innerHTML = text; // ntfy JSON is trusted for this app
                 lastUpdateEl.innerText = timestamp || new Date().toLocaleTimeString();
                 contentEl.style.opacity = 1;
-                statusText.innerText = "LIVE FEED";
-                statusDot.classList.add('active');
             }, 800);
         }
 
-        function listenForUpdates() {
-            // Initial fetch
-            fetch(`https://dweet.io/get/latest/dweet/for/${THING_NAME}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.with && data.with.length > 0) {
-                        const content = data.with[0].content;
-                        if (content.text) {
-                            updateDisplay(content.text, content.timestamp);
-                        }
-                    }
-                })
-                .catch(err => console.log("Waiting for data..."));
+        function connectToNtfy() {
+            console.log("Connecting to ntfy.sh...");
+            const eventSource = new EventSource(NTFY_URL);
 
-            // Polling loop
-            setInterval(() => {
-                fetch(`https://dweet.io/get/latest/dweet/for/${THING_NAME}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.with && data.with.length > 0) {
-                            const dweet = data.with[0];
-                            const content = dweet.content;
-                            if (content.text && content.text !== contentEl.innerHTML) {
-                                updateDisplay(content.text, content.timestamp);
-                            }
-                        }
-                    })
-                    .catch(err => {
-                        statusDot.classList.remove('active');
-                        statusText.innerText = "OFFLINE";
-                    });
-            }, 5000);
+            eventSource.onopen = () => {
+                console.log("Connected to ntfy.sh");
+                statusText.innerText = "LIVE FEED";
+                statusDot.classList.add('active');
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    // ntfy wraps the payload in 'message' or raw json
+                    // If we sent JSON via python requests, it comes in 'message' string if we didn't specify headers carefully,
+                    // OR if we sent valid JSON body, ntfy might pass it through.
+                    // Actually ntfy sends the body as "message" string for default POSTs, or we can parse if it's JSON.
+
+                    let payload = {};
+                    try {
+                        // Attempt to parse the 'message' field which contains our JSON payload
+                        payload = JSON.parse(data.message);
+                    } catch (e) {
+                        // If not JSON, maybe plain text? (Fallback)
+                        console.log("Received non-JSON message:", data.message);
+                        return;
+                    }
+
+                    if (payload.text) {
+                        updateDisplay(payload.text, payload.timestamp);
+                    }
+                } catch (e) {
+                    console.error("Error parsing SSe event:", e);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                console.error("EventSource failed:", err);
+                statusDot.classList.remove('active');
+                statusText.innerText = "RECONNECTING...";
+                // EventSource auto-reconnects, but UI feedback is nice
+            };
         }
 
-        listenForUpdates();
+        connectToNtfy();
 
     </script>
 </body>
